@@ -1,0 +1,71 @@
+flowchart LR
+  user(("Пользователи системы(аналитики-менеджеры-продажники-врачи)"))
+  %% Доменные сервисы
+  subgraph DomainServices ["Домены/Сервисы"]
+    HCSvc["Сервисы здоровья<br/>(данные пациентов)"]
+    FinSvc["Финансовые сервисы<br/>(финансовые операции)"]
+    PharmSvc["Сервисы фармацевтики<br/>(фарма)"]
+    ElectronicSvc["Сервисы электроники<br/>(данные )"]
+  end
+
+  %% Событийная платформа
+  subgraph EventBus ["Событийная платформа"]
+    Kafka["Kafka / Pulsar"]
+  end
+
+  %% Хранилище и API Data Mesh
+  subgraph DataLayer ["Data Lakehouse и Data Mesh"]
+    DataLake["Data Lakehouse<br/>(Delta Lake / Parquet на S3)"]
+    MeshAPI["API Data Mesh<br/>(GraphQL / REST)"]
+  end
+
+
+  %% Портал самообслуживания и BI
+  subgraph AccessLayer ["Портал самообслуживания и BI"]
+    Portal["Портал самообслуживания<br/>(датапортал)"]
+    BI["BI-платформа<br/>(Tableau / Superset)"]
+    ML["ML-пайплайн<br/>(обучение и инференс)"]
+    Auth["Аутентификация и ABAC (Keycloak)<br/>(единая модель доступа)"]
+  end
+
+  %% Легаси-слой
+  subgraph Legacy ["Легаси-слой"]
+    DWH["DWH SQL Server 2008<br/>(только чтение истории)"]
+    Camel["Apache Camel<br/>(мигрируемый)"]
+  end
+
+  subgraph LegacyProxy ["Легаси-прокси"]
+    ProxyQueueReader["Container, Python приложение<br/>(чтение из очереди, и конвертация в новый форамт сообшений)"]
+    LegacyEtl["Container, Python приложение<br/>(постепенная миграция)"]
+
+  end
+
+  %% Потоки данных
+    HCSvc -->|Информация о пациентах| Kafka
+    FinSvc-->|Финансолвая информация| Kafka
+    PharmSvc-->|информация о лекарствах | Kafka
+    ElectronicSvc-->|информация с медицинских устройств| Kafka
+
+  ElectronicSvc   -->|События партнёров| Kafka
+  DWH        -->|CDC-потоки|Kafka
+  Camel      -->|Сообщения Legacy Интеграций|ProxyQueueReader
+  Kafka      --> DataLake
+
+  MeshAPI    --> Portal
+  MeshAPI    --> BI
+  MeshAPI    --> ML
+
+  Portal     --> Auth
+  BI         --> Auth
+  ML         --> Auth
+  DWH --> LegacyEtl
+  LegacyEtl --> DataLake
+DataLake --> MeshAPI
+  user --> Portal
+  user --> BI
+  user --> ML
+
+
+
+  DomainServices --> |Legacy|Camel
+  ProxyQueueReader --> Kafka
